@@ -7,9 +7,9 @@ mssql_servers = {
     administrator_login = "sqladventureworksadmin"
 
     # Generate a random password and store it in keyvaul secret
-    keyvault_key                  = "sql-rg1"
-    connection_policy             = "Default"
-    system_msi                    = true
+    keyvault_key      = "sql-rg1"
+    connection_policy = "Default"
+    system_msi        = true
     #For demo purposes only, not recommended for production
     public_network_access_enabled = true
     firewall_rules = {

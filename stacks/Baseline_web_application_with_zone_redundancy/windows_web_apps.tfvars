@@ -39,9 +39,9 @@ windows_web_apps = {
 
     connection_strings = [
       {
-        name     = "AZURE_SQL_CONNECTIONSTRING"
-        type     = "SQLAzure"
-        mssql_server_key = "adventureworks-rg1"
+        name               = "AZURE_SQL_CONNECTIONSTRING"
+        type               = "SQLAzure"
+        mssql_server_key   = "adventureworks-rg1"
         mssql_database_key = "mssql_db1"
         # lz_key = ""
       }

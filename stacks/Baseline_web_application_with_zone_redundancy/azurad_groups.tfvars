@@ -17,7 +17,7 @@ azuread_groups = {
       user_principal_names = [
       ]
       service_principal_keys = []
-      object_ids             = [
+      object_ids = [
       ]
     }
     prevent_duplicate_name = false
