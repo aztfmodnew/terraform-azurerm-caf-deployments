@@ -1,6 +1,8 @@
 module "example" {
 
-  source = "git::https://github.com/aztfmodnew/terraform-azurerm-caf.git//?ref=4.17.0"
+  source  = "aztfmodnew/caf/azurerm"
+  version = "~>4.26.1"
+  #source = "git::https://github.com/aztfmodnew/terraform-azurerm-caf.git//?ref=4.17.0"
 
 
   current_landingzone_key               = var.landingzone.key
