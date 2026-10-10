@@ -8,7 +8,7 @@ try {
         $apiMode = if ($state -eq 'A') { 'Learning' } else { 'Enforced' }
         $allow = if ($state -eq 'C') { 'true' } else { 'false' }
         $setting = '-var=sql_nsp_demo={sql_server_key="lab",storage_account_key="external",nsp_key="lab",profile_key="demo",access_mode="' + $mode + '",allow_blob_outbound=' + $allow + '}'
-        $expression = 'local.demo_network_security_perimeters["lab"].resource_associations["sql"].access_mode == "' + $apiMode + '" && contains(keys(local.demo_network_security_perimeters["lab"].access_rules), "blob") == ' + $allow + ' && local.demo_network_security_perimeters["lab"].access_rules["operator"].address_prefixes == ["203.0.113.10/32"]'
+        $expression = 'local.demo_network_security_perimeters["lab"].resource_associations["sql"].access_mode == "' + $apiMode + '" && contains(keys(local.demo_network_security_perimeters["lab"].access_rules), "blob") == ' + $allow + ' && local.demo_network_security_perimeters["lab"].access_rules["operator"].address_prefixes == [format("%s/32", var.entra_only_sql_servers["lab"].operator_ipv4)]'
         $result = $expression | terraform console @varFiles $setting
         if ($LASTEXITCODE -ne 0 -or ($result -join '').Trim() -ne 'true') { throw "Configuration state $state failed." }
         Write-Output "PASS: $state mode, optional outbound key and constant /32."

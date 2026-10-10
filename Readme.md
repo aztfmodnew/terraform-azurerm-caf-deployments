@@ -11,6 +11,10 @@ This repository contains Terraform code to deploy demos  in Azure Cloud using Te
   Run from the repository root with an explicit workspace, like
   `demos/300-advanced-network-manager`. The earlier autonomous Azure rehearsal is
   historical, not validation of this new root.
+  The shared root was also deployed and tested on 2026-10-10: A/C read two
+  events, B/D blocked with SQL 40197/25717 after propagation. The final reviewed
+  destroy removed 19 Terraform objects; empty state and absent resource group
+  were verified. See the demo's `ensayo-raiz-azure.json` for evidence and limits.
 
 See [CAF 5 migration/compatibility notes](tools/CAF5.md) before planning existing
 demos. Removed upstream resource types require migration; do not blindly apply.

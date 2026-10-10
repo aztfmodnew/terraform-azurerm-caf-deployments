@@ -101,8 +101,12 @@ se comprueban con `terraform fmt -check demos/sql-network-security-perimeter`.
 
 ## Despliegue y lectura (solo tras revisar/aprobar el plan)
 
-**Esta correccion solo ejecuta init/validate/plan, no un nuevo apply/destroy.**
-Los siguientes comandos son el procedimiento futuro autorizado por el operador:
+**Integracion desplegada y probada el 2026-10-10 desde el root compartido.**
+El plan/apply inicial creo 19 objetos Terraform. A/C devolvieron dos eventos;
+B y D bloquearon la lectura con error exterior 40197 e interno 25717, manteniendo
+login y entrada /32. Ver [ensayo raiz](ensayo-raiz-azure.json) para tiempos,
+propagacion, diagnosticos y comprobacion de destruccion. Los siguientes comandos
+reproducen el flujo; revisar cada plan antes de aplicarlo:
 
 ```powershell
 # El wrapper ya selecciono sql-nsp-tour; comprobar antes del apply guardado.
@@ -136,7 +140,7 @@ login 42118 es inbound y **no** demuestra salida. No ampliar IP a `0.0.0.0/0`.
 Las consultas [diagnosticos-query.json](diagnosticos-query.json),
 [tablas](diagnosticos-tablas.json) y [esquema](diagnosticos-schema.json) usan las
 columnas historicamente verificadas de `NSPAccessLogs`. El nuevo root configura
-categorias explicitas, no `allLogs`. No se promete latencia ni resultados nuevos.
+categorias explicitas, no `allLogs`. No se promete latencia.
 
 ## Evidencia y validacion
 
@@ -162,8 +166,14 @@ wrapper: A **19 altas**, C **20 altas**, demo original `300-advanced-network-man
 verifican IDs SQL y asociacion NSP desconocidos, sin password/Key Vault/identidad
 SQL; la regresion 300 confirma helpers SQL/NSP desactivados y los tres modulos
 CAF instalados exactamente en 5.0.0. Pasaron 9 regresiones PowerShell, 5 Bash y
-5 comprobaciones de configuracion A/B/C/D/default. No se hizo apply/destroy ni
-se creo un state aplicado del nuevo laboratorio. AzureRM avisa de deprecacion
+5 comprobaciones de configuracion A/B/C/D/default. Ademas se ejecuto plan/apply
+y T-SQL A/B/C/D con workspace exclusivo del root compartido.
+Tras retirar FQDN, la primera lectura D aun devolvio filas; ARM confirmo Enforced
+y solo la regla inbound. Una repeticion posterior fallo con 40197/25717:
+esperar propagacion real, no prometer bloqueo instantaneo.
+Azure devuelve `geo_backup_enabled=true` en Basic aunque CAF predetermina false;
+se explicita true para evitar drift durante B/C/D, manteniendo backups Local.
+AzureRM avisa de deprecacion
 `public_network_access_enabled` dentro de CAF 5.0.0 (no error); la demo mantiene
 el atributo realmente soportado por esa API CAF. No modificar el modulo descargado.
 
@@ -180,6 +190,12 @@ Estos contratos de planes usan la IP/nombre de Storage documentales del ejemplo.
 Tras personalizarlos, adaptar las expectativas locales; no publicar datos privados.
 
 ## Rollback y limpieza futura
+
+Ensayo compartido cerrado: sesion/credencial SQL limpiadas a las 20:56:03 UTC.
+Plan final revisado y aplicado: 19 objetos Terraform destruidos.
+A las 21:03:17 UTC se comprobaron state vacio y RG inexistente.
+NSPAccessLogs confirmo A y B; C/D no llegaron en la ultima consulta antes de
+limpiar. No se afirma correlacion de logs C/D para este nuevo ensayo.
 
 En laboratorio, volver a A tras revisar el plan. Limpiar T-SQL con
 `ejecutar-sql.ps1 -Action Cleanup -Workspace sql-nsp-tour`.

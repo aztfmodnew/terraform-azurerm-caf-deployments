@@ -23,6 +23,7 @@ mssql_databases = {
     sku_name             = "Basic"
     max_size_gb          = 2
     storage_account_type = "Local"
+    geo_backup_enabled   = true
     zone_redundant       = false
   }
 }
