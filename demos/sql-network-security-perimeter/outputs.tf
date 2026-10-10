@@ -23,5 +23,9 @@ output "nsp_id" {
 }
 
 output "demo_state" {
-  value = { access_mode = var.access_mode, allow_blob_outbound = var.allow_blob_outbound }
+  value = {
+    access_mode         = var.access_mode
+    nsp_api_access_mode = local.nsp_api_access_mode
+    allow_blob_outbound = var.allow_blob_outbound
+  }
 }

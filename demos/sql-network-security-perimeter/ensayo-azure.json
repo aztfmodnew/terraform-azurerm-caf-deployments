@@ -1,0 +1,86 @@
+{
+  "date": "2026-10-10",
+  "location": "spaincentral",
+  "caf": {
+    "source": "aztfmodnew/caf/azurerm",
+    "version": "5.0.0",
+    "transitionApiValue": "Learning"
+  },
+  "scenario": "Azure SQL Database reads a synthetic Extended Events Blob file outside NSP using a short-lived user delegation SAS.",
+  "controls": [
+    "Same Blob file, SQL query and database scoped credential across A/B/C/D",
+    "Entra login and operator /32 inbound rule remain unchanged",
+    "Storage outside NSP, private container, shared account keys disabled",
+    "Read refreshes the SQL Entra token, not the Blob SAS"
+  ],
+  "results": [
+    {
+      "state": "A",
+      "utc": "2026-10-10T17:22:10.3884675Z",
+      "mode": "Transition",
+      "allowBlobOutbound": false,
+      "eventRows": 2,
+      "result": "Completed",
+      "log": {
+        "table": "NSPAccessLogs",
+        "category": "NspPublicOutboundResourceRulesAllowed",
+        "action": "Allowed",
+        "matchedRule": "defaultPolicy"
+      }
+    },
+    {
+      "state": "B",
+      "utc": "2026-10-10T17:28:56.7020872Z",
+      "mode": "Enforced",
+      "allowBlobOutbound": false,
+      "result": "SqlException",
+      "errorNumber": 40197,
+      "internalErrorNumber": 25717,
+      "log": {
+        "table": "NSPAccessLogs",
+        "category": "NspPublicOutboundPerimeterRulesDenied",
+        "action": "Denied",
+        "matchedRule": "DefaultDenyAll"
+      }
+    },
+    {
+      "state": "C",
+      "utc": "2026-10-10T17:33:43.7593353Z",
+      "mode": "Enforced",
+      "allowBlobOutbound": true,
+      "eventRows": 2,
+      "result": "Completed",
+      "log": {
+        "table": "NSPAccessLogs",
+        "category": "NspPublicOutboundPerimeterRulesAllowed",
+        "action": "Allowed",
+        "matchedRule": "blob-outbound"
+      }
+    },
+    {
+      "state": "D",
+      "utc": "2026-10-10T17:37:53.5814898Z",
+      "mode": "Enforced",
+      "allowBlobOutbound": false,
+      "result": "SqlException",
+      "errorNumber": 40197,
+      "internalErrorNumber": 25717,
+      "log": null,
+      "logLimitation": "D had not appeared in the last ingestion query before cleanup. SQL result verified; no D log correlation claimed."
+    }
+  ],
+  "deploymentCorrections": [
+    "West Europe rejected SQL provisioning; partial deployment destroyed (7 Terraform objects).",
+    "Spain Central SQL Basic requires locally redundant backup storage in this lab.",
+    "CAF 5.0.0 association API requires Learning rather than Transition."
+  ],
+  "cleanup": {
+    "sqlSessionAndCredentialRemovedUtc": "2026-10-10T17:38:37.7511784Z",
+    "finalPlan": { "create": 0, "update": 0, "delete": 15 },
+    "finalApply": { "added": 0, "changed": 0, "destroyed": 15 },
+    "verificationUtc": "2026-10-10T17:45:24.9157812Z",
+    "terraformStateResources": 0,
+    "resourceGroupExists": false,
+    "costLimitation": "Resource removal does not cancel incurred charges or prove absence of soft-delete retention."
+  }
+}

@@ -77,6 +77,10 @@ variables {
 run "a_transition" {
   command = plan
   assert {
+    condition     = output.demo_state.nsp_api_access_mode == "Learning" && azurerm_mssql_database.lab.storage_account_type == "Local"
+    error_message = "CAF's 2023 API requires Learning, and this lab must use locally redundant SQL backups."
+  }
+  assert {
     condition     = output.demo_state.access_mode == "Transition" && !output.demo_state.allow_blob_outbound
     error_message = "A must start in Transition without the outbound exception."
   }
@@ -96,7 +100,7 @@ run "b_enforced" {
     access_mode = "Enforced"
   }
   assert {
-    condition     = output.demo_state.access_mode == "Enforced" && !output.demo_state.allow_blob_outbound
+    condition     = output.demo_state.access_mode == "Enforced" && output.demo_state.nsp_api_access_mode == "Enforced" && !output.demo_state.allow_blob_outbound
     error_message = "B must enforce without the outbound exception."
   }
 }

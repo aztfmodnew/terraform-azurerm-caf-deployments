@@ -20,15 +20,20 @@ NSP y no se crea identidad administrada en SQL. Los datos son sinteticos.
 El operador conecta por TDS con Entra ID y una regla inbound /32 permanente:
 demostramos la **salida SQL -> Blob**, no un bloqueo de login.
 
-Codigo generado y validacion local no significan despliegue ni ensayo Azure.
-SQL NSP sigue documentado como preview. Reconfirmar soporte antes del evento.
+**Ensayo Azure real: 2026-10-10, Spain Central.** Se ejecutaron plan/apply y
+T-SQL en A/B/C/D: A y C devolvieron dos eventos; B y D mantuvieron el login
+pero fallaron al leer Blob con error exterior 40197 e interno 25717.
+NSPAccessLogs confirmo A Allowed/defaultPolicy, B Denied/DefaultDenyAll y
+C Allowed/blob-outbound. El log de D no se habia ingerido en la ultima consulta:
+su resultado SQL esta verificado, pero no se afirma correlacion de log para D.
+Consultar [evidencia del ensayo](ensayo-azure.json) para tiempos y limpieza.
+SQL NSP sigue documentado como preview; reconfirmar soporte y repetir el ensayo
+antes del evento. El laboratorio destruido no constituye una demo desplegada.
 
-Validacion local realizada: init y validate del modulo raiz 5.0.0, fmt y seis
-pruebas con providers mock (A/B/C/D y dos entradas invalidas). Tras separar la
-referencia SQL en remote_objects, paso tambien el test de primer plan con el
-ID de SQL desconocido: siete pruebas comprobadas en total, sin llamadas de datos
-ni apply en Azure. Estas pruebas verifican configuracion y plan, no el bloqueo
-real ni la ejecucion T-SQL. Antes del evento hay que ensayar los cuatro estados.
+Validacion local: init, validate, fmt y siete pruebas mock, incluyendo A/B/C/D,
+entradas invalidas y primer plan con ID SQL desconocido. Se incorporan regresiones
+para la traduccion API Learning y backups Local descubiertas en Azure.
+Las pruebas mock verifican configuracion, no sustituyen el ensayo T-SQL.
 
 ## Infraestructura
 
@@ -60,8 +65,9 @@ real ni la ejecucion T-SQL. Antes del evento hay que ensayar los cuatro estados.
 
 ## Precondiciones y despliegue (fuera de los nueve minutos)
 
-Terraform >= 1.8, Azure CLI autenticada, SSMS con SQLCMD o `sqlcmd` con soporte
-de Entra, draw.io solo para editar el diagrama. Suscripcion autorizada, permisos
+Terraform >= 1.8, Azure CLI autenticada y PowerShell con System.Data.SqlClient
+(runner probado localmente); alternativamente SSMS SQLCMD o `sqlcmd` con soporte
+Entra. draw.io solo para editar el diagrama. Suscripcion autorizada, permisos
 de creacion y asignacion de roles, proveedores Microsoft.Sql, Microsoft.Storage,
 Microsoft.Network y Microsoft.OperationalInsights ya registrados. No se
 auto-registran proveedores de toda la suscripcion.
@@ -71,13 +77,22 @@ Copiar [terraform.tfvars.example](terraform.tfvars.example) a
 administrador de SQL debe ser de este tenant. Su IP publica debe ser estable.
 El sufijo de Storage/SQL debe ser globalmente unico.
 
+Elegir region explicitamente y consultar [comprobar-region.ps1](comprobar-region.ps1)
+antes del plan. West Europe rechazo el aprovisionamiento SQL en la suscripcion
+del ensayo; Spain Central lo permitio. La comprobacion de capacidades del servidor
+no garantiza cuotas, SKU ni disponibilidad. Basic en Spain Central requirio
+backups `Local` (incluidos en el codigo); no usar el valor Geo por defecto.
+`Transition` se traduce a `Learning` para la API NSP 2023 usada por CAF 5.0.0;
+`demo_state` muestra ambos nombres. No cambiar la variable publica a Learning.
+
 ```powershell
+.\comprobar-region.ps1 -SubscriptionId '<suscripcion-autorizada>' -Location spaincentral
 terraform init -input=false
 terraform workspace select -or-create sql-nsp-tour
 terraform fmt -check
 terraform validate
 terraform test
-terraform plan -out=local-A.tfplan -var='access_mode=Transition' -var='allow_blob_outbound=false'
+terraform plan '-out=local-A.tfplan' '-var=access_mode=Transition' '-var=allow_blob_outbound=false'
 # Revisar suscripcion, costes y diff antes de aprobar:
 terraform apply local-A.tfplan
 ```
@@ -106,6 +121,18 @@ operador con autorizacion; no ampliar el acceso a toda la suscripcion.
 Esperar propagacion RBAC. No eludir Azure Policy.
 
 ## Preparar la lectura
+
+Ruta usada en el ensayo, sin instalar sqlcmd: [ejecutar-sql.ps1](ejecutar-sql.ps1)
+obtiene token Entra, emite la SAS solo en Prepare y no imprime ni guarda secretos.
+Read reutiliza la credencial y archivo existentes; un resultado sin filas sale
+con codigo 2, no se presenta como exito.
+
+```powershell
+.\ejecutar-sql.ps1 -Action Prepare
+.\ejecutar-sql.ps1 -Action Read
+```
+
+Alternativa SQLCMD:
 
 En una terminal privada, sin transcripcion ni grabacion, obtener la SAS de
 delegacion de usuario de dos horas. No imprimirla, pasarla en argumentos, subirla
@@ -163,9 +190,9 @@ Para cada estado posterior:
 
 ```powershell
 # B; para C cambiar false a true; D vuelve a false.
-terraform plan -out=local-next.tfplan -var='access_mode=Enforced' -var='allow_blob_outbound=false'
+terraform plan '-out=local-next.tfplan' '-var=access_mode=Enforced' '-var=allow_blob_outbound=false'
 terraform apply local-next.tfplan
-sqlcmd -S "tcp:$server,1433" -d demo -G -b -i '.\02-leer.sql'
+.\ejecutar-sql.ps1 -Action Read
 ```
 
 En B/D, un error de lectura es esperado, pero **no todo error es NSP**.
@@ -176,8 +203,11 @@ seria inbound y **no demostraria nuestra salida**; revisar IP /32.
 No ampliar FQDN a `*.blob.core.windows.net` ni IP a `0.0.0.0/0`.
 
 Los cambios de asociacion aparecen en Activity Log; evaluaciones en diagnosticos
-NSP. Se habilita `allLogs`; comprobar categorias y tabla reales en la region.
-No asumir un nombre de tabla ni prometer latencia. Registrar hora UTC, modo,
+NSP. Se habilita `allLogs`; en el ensayo la tabla real fue `NSPAccessLogs`,
+no `AzureDiagnostics`. [diagnosticos-query.json](diagnosticos-query.json) consulta
+las columnas verificadas. Los archivos de [tablas](diagnosticos-tablas.json) y
+[esquema](diagnosticos-schema.json) permiten comprobar el destino antes de filtrar.
+No prometer latencia. Registrar hora UTC, modo,
 FQDN, salida de lectura saneada y motivo del evento. Ensayar A/B/C/D antes del
 evento; no ejecutar el despliegue inicial en directo. Si se excede el tiempo,
 usar el diagrama y expectativas, identificandolas como no ejecutadas.
@@ -187,9 +217,20 @@ usar el diagrama y expectativas, identificandolas como no ejecutadas.
 Rollback solo en laboratorio: aplicar Transition sin regla outbound tras
 revisar el plan; reabre la salida permitida en Transition. No aplicarlo a otros
 servidores. Limpiar credencial/event session con [03-limpiar.sql](03-limpiar.sql)
-(requiere `BlobHost`). Revisar `terraform plan -destroy`, despues ejecutar
-`terraform destroy` con confirmacion. Verificar RG eliminado y costes residuales.
-No hay borrado ni despliegue realizado por el asistente.
+(requiere `BlobHost`) o `.\ejecutar-sql.ps1 -Action Cleanup`.
+Guardar y revisar el plan de destruccion antes de aplicarlo:
+
+```powershell
+terraform plan -destroy '-out=local-destroy.tfplan'
+terraform apply local-destroy.tfplan
+terraform state list
+az group exists --name '<rg-exclusivo-del-laboratorio>'
+```
+
+Si se usa un var-file distinto de terraform.tfvars, pasarlo explicitamente
+en **todos** los planes, incluido destroy. Verificar state vacio y RG inexistente;
+no eliminar el state antes. Revisar Cost Management por cargos ya devengados:
+destroy no revierte costes ni garantiza desaparicion de retencion soft-delete.
 
 ## Fuentes verificadas
 

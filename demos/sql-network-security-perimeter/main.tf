@@ -29,6 +29,11 @@ provider "azapi" {
 
 data "azurerm_client_config" "operator" {}
 
+locals {
+  # CAF 5.0.0 uses the 2023 API, whose enum still calls Transition "Learning".
+  nsp_api_access_mode = var.access_mode == "Transition" ? "Learning" : var.access_mode
+}
+
 resource "azurerm_resource_group" "lab" {
   name     = "rg-${var.lab_name}"
   location = var.location
@@ -52,11 +57,12 @@ resource "azurerm_mssql_server" "lab" {
 }
 
 resource "azurerm_mssql_database" "lab" {
-  name           = "demo"
-  server_id      = azurerm_mssql_server.lab.id
-  sku_name       = "Basic"
-  max_size_gb    = 2
-  zone_redundant = false
+  name                 = "demo"
+  server_id            = azurerm_mssql_server.lab.id
+  sku_name             = "Basic"
+  max_size_gb          = 2
+  zone_redundant       = false
+  storage_account_type = "Local"
 }
 
 resource "azurerm_mssql_firewall_rule" "operator" {
@@ -132,7 +138,7 @@ module "caf" {
             name         = "sql"
             profile_key  = "demo"
             mssql_server = { lz_key = "external", key = "lab" }
-            access_mode  = var.access_mode
+            access_mode  = local.nsp_api_access_mode
           }
         }
         access_rules = merge(

@@ -1,4 +1,5 @@
 subscription_id     = "00000000-0000-0000-0000-000000000000"
+location            = "spaincentral"
 unique_suffix       = "replace123"
 operator_ipv4       = "203.0.113.10"
 sql_admin_name      = "Lab SQL administrator"
