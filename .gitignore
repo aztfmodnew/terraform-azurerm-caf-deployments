@@ -37,3 +37,6 @@ terraform.rc
 # Local demos
 
 demo-local
+*.local.log
+*.tfplan
+*.local.json

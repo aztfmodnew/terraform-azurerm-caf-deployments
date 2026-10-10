@@ -1,0 +1,33 @@
+{
+  "date": "2026-10-10",
+  "location": "spaincentral",
+  "implementation": "Shared repository root module.example, aztfmodnew/caf/azurerm exactly 5.0.0, sector tfvars loaded through Terraform-WithVarFiles.",
+  "initialApply": { "added": 19, "changed": 0, "destroyed": 0 },
+  "controls": [
+    "Same SQL query, Blob file and database scoped SAS credential across A/B/C/D.",
+    "Entra SQL login and operator inbound /32 unchanged.",
+    "SQL has no managed identity, password or Key Vault secret.",
+    "Storage outside NSP, private container, shared account keys disabled.",
+    "Read refreshes SQL Entra token, not the Blob SAS.",
+    "SQL backups remain Local; geo_backup_enabled explicitly true avoids the Basic service flag drift."
+  ],
+  "results": [
+    { "state": "A", "utc": "2026-10-10T20:30:43.3969843Z", "mode": "Transition", "apiMode": "Learning", "allowBlobOutbound": false, "eventRows": 2, "result": "Completed", "logCategory": "NspPublicOutboundResourceRulesAllowed", "logAction": "Allowed", "logRule": "defaultPolicy" },
+    { "state": "B", "utc": "2026-10-10T20:41:19.6044811Z", "mode": "Enforced", "allowBlobOutbound": false, "result": "SqlException", "errorNumber": 40197, "internalErrorNumber": 25717, "logCategory": "NspPublicOutboundPerimeterRulesDenied", "logAction": "Denied", "logRule": "DefaultDenyAll" },
+    { "state": "C", "utc": "2026-10-10T20:46:52.3321280Z", "mode": "Enforced", "allowBlobOutbound": true, "eventRows": 2, "result": "Completed", "logCategory": null },
+    { "state": "D-initial", "utc": "2026-10-10T20:52:24.1316617Z", "mode": "Enforced", "allowBlobOutbound": false, "eventRows": 2, "result": "Completed", "limitation": "First read after rule removal still succeeded. Do not assume instant propagation." },
+    { "state": "D-retry", "utc": "2026-10-10T20:55:46.3920350Z", "mode": "Enforced", "allowBlobOutbound": false, "result": "SqlException", "errorNumber": 40197, "internalErrorNumber": 25717, "logCategory": null }
+  ],
+  "armVerificationAfterRemoval": { "accessMode": "Enforced", "provisioningState": "Succeeded", "hasProvisioningIssues": "no", "remainingRules": [ "operator-inbound" ] },
+  "diagnosticLimitation": "NSPAccessLogs captured A and B. C/D had not appeared in the last query before cleanup. Their SQL results are verified; no C/D log correlation claimed for this root rehearsal.",
+  "cleanup": {
+    "sqlSessionAndCredentialRemovedUtc": "2026-10-10T20:56:03.4903244Z",
+    "finalPlan": { "create": 0, "update": 0, "delete": 19 },
+    "finalApply": { "added": 0, "changed": 0, "destroyed": 19 },
+    "verificationUtc": "2026-10-10T21:03:17.5038586Z",
+    "terraformStateResources": 0,
+    "resourceGroupExists": false,
+    "costLimitation": "Removal does not reverse incurred charges or prove absence of soft-delete retention."
+  },
+  "historicalEvidence": "ensayo-azure.json describes the previous standalone root and must not be presented as verification of this shared root."
+}

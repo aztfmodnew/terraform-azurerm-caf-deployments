@@ -18,6 +18,8 @@ function Terraform-WithVarFiles {
         [Parameter(Mandatory=$false)]
         [string]$Workspace = "default",
 
+        [string[]]$TerraformArguments = @(),
+
         [switch]$Help
     )
 
@@ -30,62 +32,57 @@ function Terraform-WithVarFiles {
         Write-Output "  -ResourceAddress ADDR   Specify the resource address for import action (optional)"
         Write-Output "  -ResourceId ID          Specify the resource ID for import action (optional)"
         Write-Output "  -Workspace WORKSPACE    Specify the Terraform workspace (default: default)"
+        Write-Output "  -TerraformArguments ARGS Additional Terraform arguments (passed without evaluation)"
         Write-Output "  -Help                   Show this help message"
         return
     }
 
     if (-not (Test-Path -Path $Dir -PathType Container)) {
-        Write-Error "The specified directory does not exist."
-        return
+        throw "The specified directory does not exist."
     }
 
     if ($Action -notin @("plan", "apply", "destroy", "import")) {
-        Write-Error "Invalid action. Use 'plan', 'apply', 'destroy', or 'import'."
-        return
+        throw "Invalid action. Use 'plan', 'apply', 'destroy', or 'import'."
     }
 
-    $varFiles = Get-ChildItem -Path $Dir -Filter *.tfvars | ForEach-Object { "--var-file $_" }
+    $varFiles = @(Get-ChildItem -LiteralPath $Dir -Filter *.tfvars -File | Sort-Object Name | ForEach-Object { "-var-file=$($_.FullName)" })
 
     if ($varFiles.Count -eq 0) {
-        Write-Error "No .tfvars files found in the specified directory."
-        return
+        throw "No .tfvars files found in the specified directory."
     }
 
     Write-Output "Initializing Terraform..."
-    terraform init
+    terraform init -input=false
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "Terraform initialization failed."
-        return
+        throw "Terraform initialization failed."
     }
 
     Write-Output "Selecting the workspace: $Workspace"
     terraform workspace select -or-create $Workspace
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "Workspace selection failed."
-        return
+        throw "Workspace selection failed."
     }
 
     Write-Output "Validating Terraform configuration..."
     terraform validate
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "Terraform validation failed."
-        return
+        throw "Terraform validation failed."
     }
 
-    $command = "terraform $Action $($varFiles -join ' ')"
+    $terraformArgs = @($Action) + $varFiles + $TerraformArguments
 
     if ($Action -eq "import") {
         if (-not $ResourceAddress -or -not $ResourceId) {
-            Write-Error "For 'import' action, both resource address and resource ID must be provided."
-            return
+            throw "For 'import' action, both resource address and resource ID must be provided."
         }
-        $command = "$command $ResourceAddress $ResourceId"
+        $terraformArgs += @($ResourceAddress, $ResourceId)
     } elseif ($Auto -eq "auto" -and ($Action -eq "apply" -or $Action -eq "destroy")) {
-        $command = "$command -auto-approve"
+        $terraformArgs += "-auto-approve"
     }
 
-    Write-Output "Executing: $command"
-    Invoke-Expression $command
+    Write-Output "Executing Terraform $Action in workspace $Workspace with $($varFiles.Count) var-files."
+    & terraform @terraformArgs
+    if ($LASTEXITCODE -ne 0) { throw "Terraform $Action failed (exit $LASTEXITCODE)." }
 }
 
 # Usage examples:

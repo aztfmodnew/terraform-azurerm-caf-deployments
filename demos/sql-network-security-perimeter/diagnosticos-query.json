@@ -1,0 +1,3 @@
+{
+  "query": "NSPAccessLogs | where TimeGenerated > ago(2h) | where ResultDirection =~ 'Outbound' or Category contains 'Outbound' | project TimeGenerated, Category, ResultDirection, ResultAction, DestinationFqdn, MatchedRule, ResultDescription, Count | order by TimeGenerated asc"
+}

@@ -1,3 +1,15 @@
+variable "resource_provider_registrations" {
+  description = "AzureRM automatic provider registration mode. Set none when providers are pre-registered."
+  type        = string
+  default     = "core"
+}
+
+variable "storage_use_azuread" {
+  description = "Use Entra authentication for Storage data-plane operations when shared keys are disabled."
+  type        = bool
+  default     = false
+}
+
 variable "provider_azurerm_features_api_management" {
   type = map(any)
   default = {

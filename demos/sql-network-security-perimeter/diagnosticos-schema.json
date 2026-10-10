@@ -1,0 +1,3 @@
+{
+  "query": "NSPAccessLogs | getschema | project ColumnName, DataType"
+}

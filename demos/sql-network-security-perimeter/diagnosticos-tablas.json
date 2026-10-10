@@ -1,0 +1,3 @@
+{
+  "query": "search * | where TimeGenerated > ago(2h) | summarize Events=count() by $table"
+}
