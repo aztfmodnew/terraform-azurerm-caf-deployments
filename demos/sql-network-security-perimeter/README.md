@@ -1,241 +1,197 @@
-# Demo: Azure SQL Database lee un archivo HTTPS y NSP decide la salida
+# Azure SQL outbound access with Network Security Perimeter
 
-## Resultado y limite
+## Resultado y limites
 
-SQL Database lee un archivo de Extended Events (`.xel`) en un contenedor Blob
-privado, **fuera del NSP**. A Transition (antes Learning): lectura permitida.
-B Enforced sin regla outbound: lectura bloqueada. C Enforced con FQDN exacto:
-lectura permitida. D retirada del FQDN: bloqueada.
-
-Se elige este archivo, en lugar de una web arbitraria, porque Microsoft documenta
-expresamente la evaluacion NSP de esta lectura saliente. No es un navegador, ni
-una demostracion de exfiltracion generica. No se usa
-`sp_invoke_external_rest_endpoint`: sus destinos estan restringidos y no se
-presupone su cobertura NSP.
-
-**Importante:** la credencial SQL usa un SAS de corta vida. Para Extended Events,
-Microsoft documenta que la identidad administrada no necesita la regla FQDN en
-este escenario: usarla invalidaria la prediccion de B. Storage no se asocia al
-NSP y no se crea identidad administrada en SQL. Los datos son sinteticos.
-El operador conecta por TDS con Entra ID y una regla inbound /32 permanente:
-demostramos la **salida SQL -> Blob**, no un bloqueo de login.
-
-**Ensayo Azure real: 2026-10-10, Spain Central.** Se ejecutaron plan/apply y
-T-SQL en A/B/C/D: A y C devolvieron dos eventos; B y D mantuvieron el login
-pero fallaron al leer Blob con error exterior 40197 e interno 25717.
-NSPAccessLogs confirmo A Allowed/defaultPolicy, B Denied/DefaultDenyAll y
-C Allowed/blob-outbound. El log de D no se habia ingerido en la ultima consulta:
-su resultado SQL esta verificado, pero no se afirma correlacion de log para D.
-Consultar [evidencia del ensayo](ensayo-azure.json) para tiempos y limpieza.
-SQL NSP sigue documentado como preview; reconfirmar soporte y repetir el ensayo
-antes del evento. El laboratorio destruido no constituye una demo desplegada.
-
-Validacion local: init, validate, fmt y siete pruebas mock, incluyendo A/B/C/D,
-entradas invalidas y primer plan con ID SQL desconocido. Se incorporan regresiones
-para la traduccion API Learning y backups Local descubiertas en Azure.
-Las pruebas mock verifican configuracion, no sustituyen el ensayo T-SQL.
-
-## Infraestructura
-
-- [Terraform](main.tf): RG, SQL logical server Entra-only, DB Basic, StorageV2
-  LRS/Hot, contenedor privado, rol de datos para el operador, NSP y workspace.
-- **Modulo raiz aztfmodnew CAF 5.0.0**, exactamente:
-
-  ```hcl
-  module "caf" {
-    source  = "aztfmodnew/caf/azurerm"
-    version = "5.0.0"
-    # Entradas completas en main.tf.
-  }
-  ```
-
-  Administra NSP, profile, asociacion al logical server y reglas inbound/outbound
-  mediante su entrada `networking.network_security_perimeters`. Reutiliza el RG
-  creado por el laboratorio. No se usan un submodulo directo ni una version 4.x.
-  La asociacion usa `remote_objects.mssql_servers` para resolver el SQL externo
-  por clave; el mapa de configuracion NSP mantiene claves conocidas incluso
-  durante el primer plan, cuando el ID de SQL aun no existe.
-- SQL y Storage usan AzureRM directamente. El submodulo SQL de esa version de
-  CAF crea un secreto Key Vault incluso con Entra-only si no recibe password.
-  Evitamos ese secreto innecesario; no pasamos passwords ficticias para sortearlo.
-- No hay VNet, VM, Private Endpoint ni claves de Storage. La SAS de delegacion
-  de usuario no entra en Terraform ni en su state.
-- Storage tiene endpoint publico de red, **sin acceso anonimo**. Es deliberado
-  para el destino externo de este laboratorio; no copiar a produccion.
-
-## Precondiciones y despliegue (fuera de los nueve minutos)
-
-Terraform >= 1.8, Azure CLI autenticada y PowerShell con System.Data.SqlClient
-(runner probado localmente); alternativamente SSMS SQLCMD o `sqlcmd` con soporte
-Entra. draw.io solo para editar el diagrama. Suscripcion autorizada, permisos
-de creacion y asignacion de roles, proveedores Microsoft.Sql, Microsoft.Storage,
-Microsoft.Network y Microsoft.OperationalInsights ya registrados. No se
-auto-registran proveedores de toda la suscripcion.
-
-Copiar [terraform.tfvars.example](terraform.tfvars.example) a
-`terraform.tfvars` y sustituir todos los valores de ejemplo. El usuario/grupo
-administrador de SQL debe ser de este tenant. Su IP publica debe ser estable.
-El sufijo de Storage/SQL debe ser globalmente unico.
-
-Elegir region explicitamente y consultar [comprobar-region.ps1](comprobar-region.ps1)
-antes del plan. West Europe rechazo el aprovisionamiento SQL en la suscripcion
-del ensayo; Spain Central lo permitio. La comprobacion de capacidades del servidor
-no garantiza cuotas, SKU ni disponibilidad. Basic en Spain Central requirio
-backups `Local` (incluidos en el codigo); no usar el valor Geo por defecto.
-`Transition` se traduce a `Learning` para la API NSP 2023 usada por CAF 5.0.0;
-`demo_state` muestra ambos nombres. No cambiar la variable publica a Learning.
-
-```powershell
-.\comprobar-region.ps1 -SubscriptionId '<suscripcion-autorizada>' -Location spaincentral
-terraform init -input=false
-terraform workspace select -or-create sql-nsp-tour
-terraform fmt -check
-terraform validate
-terraform test
-terraform plan '-out=local-A.tfplan' '-var=access_mode=Transition' '-var=allow_blob_outbound=false'
-# Revisar suscripcion, costes y diff antes de aprobar:
-terraform apply local-A.tfplan
-```
-
-Demo autocontenida: ejecutar estos comandos **desde este directorio**, no desde
-la raiz del repositorio (cuyo wrapper usa otra version de CAF para otras demos).
-Backend local explicito: state separado en el workspace `sql-nsp-tour`.
-Para un equipo, configurar backend remoto aprobado antes del primer apply.
-En Windows con rutas largas de Git, establecer solo para la terminal de init:
-
-```powershell
-$env:GIT_CONFIG_COUNT = '1'
-$env:GIT_CONFIG_KEY_0 = 'core.longpaths'
-$env:GIT_CONFIG_VALUE_0 = 'true'
-```
-
-No se modifica la configuracion global de Git.
-Conservar el lock de providers. State y planes locales estan excluidos de Git,
-pero contienen metadatos sensibles: protegerlos y no proyectarlos. No ejecutar
-`apply` en produccion. Basic, Blob y Log Analytics tienen coste; cuota diaria
-del workspace no es un limite financiero. Comprobar precios y Cost Management.
-
-El principal que despliega recibe Storage Blob Data Contributor para emitir la
-SAS de delegacion. Si la CLI usa otro principal, asignar el rol solo a ese
-operador con autorizacion; no ampliar el acceso a toda la suscripcion.
-Esperar propagacion RBAC. No eludir Azure Policy.
-
-## Preparar la lectura
-
-Ruta usada en el ensayo, sin instalar sqlcmd: [ejecutar-sql.ps1](ejecutar-sql.ps1)
-obtiene token Entra, emite la SAS solo en Prepare y no imprime ni guarda secretos.
-Read reutiliza la credencial y archivo existentes; un resultado sin filas sale
-con codigo 2, no se presenta como exito.
-
-```powershell
-.\ejecutar-sql.ps1 -Action Prepare
-.\ejecutar-sql.ps1 -Action Read
-```
-
-Alternativa SQLCMD:
-
-En una terminal privada, sin transcripcion ni grabacion, obtener la SAS de
-delegacion de usuario de dos horas. No imprimirla, pasarla en argumentos, subirla
-al repo ni pegarla en diapositivas.
-
-```powershell
-$account = terraform output -raw storage_account_name
-if ($LASTEXITCODE -ne 0) { throw 'No se pudo obtener Storage.' }
-$env:BlobHost = terraform output -raw blob_host
-if ($LASTEXITCODE -ne 0) { throw 'No se pudo obtener el host Blob.' }
-$server = terraform output -raw sql_server_fqdn
-if ($LASTEXITCODE -ne 0) { throw 'No se pudo obtener SQL.' }
-$expiry = (Get-Date).ToUniversalTime().AddHours(2).ToString('yyyy-MM-ddTHH:mm:ssZ')
-$start = (Get-Date).ToUniversalTime().AddMinutes(-5).ToString('yyyy-MM-ddTHH:mm:ssZ')
-$env:ContainerSas = az storage container generate-sas --account-name $account --name events --permissions rwdl --start $start --expiry $expiry --https-only --auth-mode login --as-user --output tsv --only-show-errors
-if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($env:ContainerSas)) {
-    Remove-Item Env:\ContainerSas -ErrorAction SilentlyContinue
-    throw 'No se pudo emitir la SAS. Revisar identidad y propagacion del rol.'
-}
-try {
-    sqlcmd -S "tcp:$server,1433" -d demo -G -b -i '.\01-preparar.sql'
-    if ($LASTEXITCODE -ne 0) { throw 'Fallo preparando Extended Events.' }
-} finally {
-    Remove-Item Env:\ContainerSas
-}
-sqlcmd -S "tcp:$server,1433" -d demo -G -b -i '.\02-leer.sql'
-if ($LASTEXITCODE -ne 0) { throw 'El baseline A no funciona. No continuar a B.' }
-```
-
-Las variables de entorno son variables SQLCMD; no usar `-e` (echo de consultas).
-Elegir el flujo Entra de la version de sqlcmd instalada; `-G` no sustituye una
-sesion/login interactivo requerido por el cliente. Alternativa: SSMS SQLCMD con
-autenticacion Entra y sustitucion privada, sin guardar la SAS. Necesita CONTROL
-en `demo` para crear la credencial. No usar `master`.
-
-[01-preparar.sql](01-preparar.sql) crea credencial SAS, genera eventos sinteticos
-y detiene la sesion. Debe ejecutarse **solo en A**, antes de proyectar. El mismo
-archivo existente y la misma credencial se reutilizan en A/B/C/D. Confirmar
-filas no vacias en A y que el SAS no expire durante la comparacion.
-
-## Guion A/B/C/D
-
-Mantener la IP inbound, login Entra, SAS, archivo y consulta constantes.
-Revisar el plan de cada cambio; esperar a que la asociacion efectiva y reglas
-coincidan en el portal. No prometer tiempos de propagacion.
+SQL Database lee un archivo sintetico Extended Events (`.xel`) por HTTPS en
+Blob privado **fuera del NSP**, usando una SAS efimera de delegacion de usuario.
+Se mantiene el login SQL Entra-only y la misma regla inbound /32 en A/B/C/D.
+No hay identidad administrada SQL: Microsoft documenta que, para esta lectura,
+esa identidad no necesita la regla FQDN e invalidaria la expectativa de bloqueo.
+No es un navegador ni una demo de exfiltracion generica. No usamos
+`sp_invoke_external_rest_endpoint` ni damos por supuesta su cobertura NSP.
 
 | Estado | `access_mode` | `allow_blob_outbound` | Lectura esperada |
 | --- | --- | --- | --- |
 | A | Transition | false | Eventos no vacios |
-| B | Enforced | false | Bloqueo NSP |
+| B | Enforced | false | Bloqueada |
 | C | Enforced | true | Mismos eventos |
-| D | Enforced | false | Bloqueo de nuevo |
+| D | Enforced | false | Bloqueada de nuevo |
 
-Para cada estado posterior:
+CAF 5 usa NSP API `2023-08-01-preview`: el wrapper traduce **Transition a Learning**.
+No cambiar la entrada publica a Learning. Se permite solo el FQDN exacto
+`<cuenta>.blob.core.windows.net`, nunca `*.blob.core.windows.net`.
+
+## Integracion raiz (no es un segundo root)
+
+Como `demos/300-advanced-network-manager`, esta carpeta contiene solamente
+configuracion sectorial y scripts. **Ejecutar Terraform desde la raiz del repo.**
+El unico modulo principal es `module.example`, source `aztfmodnew/caf/azurerm`,
+version **5.0.0 exacta**. No ejecutar `terraform init` dentro de esta carpeta.
+
+Ficheros publicos que copiar/adaptar juntos:
+
+- `global_settings.tfvars`: region Spain Central, naming passthrough y providers.
+- `resource_groups.tfvars`: RG exclusivo.
+- `sql.tfvars`: servidor Entra-only, IP documental `203.0.113.10`, IDs dummy,
+  DB Basic con backups **Local** (no Geo) y sin redundancia de zona.
+- `storage.tfvars`: StorageV2 LRS/Hot, sin shared keys, contenedor privado.
+- `logs.tfvars`: Log Analytics y categorias NSP explicitas.
+- `network_security_perimeters.tfvars`: perfil, asociacion SQL por clave,
+  diagnosticos y controles A/B/C/D.
+
+RG, DB, Storage/contenedor, logs, NSP/perfil/asociacion/reglas y diagnosticos son
+CAF. El helper raiz `sql_nsp.tf`, desactivado por defecto (`{}` / null), crea solo
+el logical server Entra-only y firewall /32: CAF 5.0.0 genera password y secreto
+Key Vault incluso Entra-only cuando no recibe password. No se proporciona una
+password ficticia. El ID SQL se entrega a CAF mediante `remote_objects`, con
+claves conocidas aunque el ID sea desconocido durante el primer plan.
+El rol Storage Blob Data Contributor se asigna al administrador/operador SQL.
+Para esta demo debe ser el usuario operador (no un grupo); esperar propagacion
+RBAC antes de emitir SAS. No hay VNet/VM/Private Endpoint.
+
+Storage permite red publica pero no acceso anonimo. Es deliberado para el destino
+externo del laboratorio, no una recomendacion de produccion. La SAS solo vive en
+memoria del runner/credencial SQL; no entra en tfvars, argumentos, state o logs.
+Ver [compatibilidad CAF 5 del wrapper](../../tools/CAF5.md).
+
+## Preparar y planificar desde la raiz
+
+Terraform >= 1.8, Azure CLI autenticada y PowerShell con System.Data.SqlClient.
+Usar una suscripcion autorizada con proveedores Sql, Storage, Network y
+OperationalInsights ya registrados; no se auto-registran proveedores.
+Necesita permisos de creacion y asignacion de roles. Comprobar cuotas, precios y
+Azure Policy. Basic, Storage y Log Analytics tienen coste; la cuota diaria de
+logs no es un limite financiero.
+
+Adaptar nombres globalmente unicos, tenant y object ID del operador y su IP publica
+estable. Guardar mapas completos modificados en `zz-local.tfvars` **ignorado**:
+Terraform reemplaza mapas, no los fusiona entre var-files. El wrapper carga los
+ficheros por nombre; `zz-local.tfvars` prevalece. Nunca publicar IDs personales,
+IP real, tokens, state ni planes.
 
 ```powershell
-# B; para C cambiar false a true; D vuelve a false.
-terraform plan '-out=local-next.tfplan' '-var=access_mode=Enforced' '-var=allow_blob_outbound=false'
-terraform apply local-next.tfplan
-.\ejecutar-sql.ps1 -Action Read
+# Desde la raiz del clone:
+az login
+$env:ARM_SUBSCRIPTION_ID = '<suscripcion-autorizada>'
+.\demos\sql-network-security-perimeter\comprobar-region.ps1 -SubscriptionId $env:ARM_SUBSCRIPTION_ID -Location spaincentral
+. .\tools\terraform_with_var_files.ps1
+Terraform-WithVarFiles -Dir .\demos\sql-network-security-perimeter -Action plan -Workspace sql-nsp-tour -TerraformArguments @('-input=false', '-out=A.local.tfplan')
 ```
 
-En B/D, un error de lectura es esperado, pero **no todo error es NSP**.
-Microsoft documenta errores 25759/25717 o incluso resultado vacio. Un resultado
-vacio no es exito ni prueba concluyente: comparar con A/C, verificar blob
-existente, vigencia SAS y correlacionar diagnósticos NSP. Fallo de login 42118
-seria inbound y **no demostraria nuestra salida**; revisar IP /32.
-No ampliar FQDN a `*.blob.core.windows.net` ni IP a `0.0.0.0/0`.
+Linux (desde la raiz):
 
-Los cambios de asociacion aparecen en Activity Log; evaluaciones en diagnosticos
-NSP. Se habilita `allLogs`; en el ensayo la tabla real fue `NSPAccessLogs`,
-no `AzureDiagnostics`. [diagnosticos-query.json](diagnosticos-query.json) consulta
-las columnas verificadas. Los archivos de [tablas](diagnosticos-tablas.json) y
-[esquema](diagnosticos-schema.json) permiten comprobar el destino antes de filtrar.
-No prometer latencia. Registrar hora UTC, modo,
-FQDN, salida de lectura saneada y motivo del evento. Ensayar A/B/C/D antes del
-evento; no ejecutar el despliegue inicial en directo. Si se excede el tiempo,
-usar el diagrama y expectativas, identificandolas como no ejecutadas.
+```bash
+export ARM_SUBSCRIPTION_ID='<authorized-subscription>'
+source ./tools/terraform_with_var_files.sh
+terraform_with_var_files --dir demos/sql-network-security-perimeter --action plan --workspace sql-nsp-tour -- -input=false -out=A.local.tfplan
+```
 
-## Rollback y limpieza
+Elegir backend aprobado **antes** del primer apply. Sin bloque backend configurado
+se usa backend local; el fichero `backend.azurerm` es una plantilla, no un backend
+activado automaticamente. Los workspaces separan state, no son barreras de
+seguridad. Proteger lock/state/planes y no proyectarlos. Con Windows/Git longpaths,
+establecer solo en el proceso de init `GIT_CONFIG_COUNT=1`,
+`GIT_CONFIG_KEY_0=core.longpaths`, `GIT_CONFIG_VALUE_0=true`; no cambiar Git global.
+Conservar el lock raiz local (el repo lo ignora por convencion).
 
-Rollback solo en laboratorio: aplicar Transition sin regla outbound tras
-revisar el plan; reabre la salida permitida en Transition. No aplicarlo a otros
-servidores. Limpiar credencial/event session con [03-limpiar.sql](03-limpiar.sql)
-(requiere `BlobHost`) o `.\ejecutar-sql.ps1 -Action Cleanup`.
-Guardar y revisar el plan de destruccion antes de aplicarlo:
+West Europe rechazo SQL durante el ensayo historico; Spain Central lo permitio.
+`comprobar-region.ps1` consulta capacidades, no garantiza cuota/disponibilidad.
+`terraform fmt -check` y `terraform validate` se ejecutan desde raiz; los tfvars
+se comprueban con `terraform fmt -check demos/sql-network-security-perimeter`.
+
+## Despliegue y lectura (solo tras revisar/aprobar el plan)
+
+**Esta correccion solo ejecuta init/validate/plan, no un nuevo apply/destroy.**
+Los siguientes comandos son el procedimiento futuro autorizado por el operador:
 
 ```powershell
-terraform plan -destroy '-out=local-destroy.tfplan'
-terraform apply local-destroy.tfplan
-terraform state list
-az group exists --name '<rg-exclusivo-del-laboratorio>'
+# El wrapper ya selecciono sql-nsp-tour; comprobar antes del apply guardado.
+terraform workspace show
+terraform apply A.local.tfplan
+.\demos\sql-network-security-perimeter\ejecutar-sql.ps1 -Action Prepare -Workspace sql-nsp-tour
+.\demos\sql-network-security-perimeter\ejecutar-sql.ps1 -Action Read -Workspace sql-nsp-tour
 ```
 
-Si se usa un var-file distinto de terraform.tfvars, pasarlo explicitamente
-en **todos** los planes, incluido destroy. Verificar state vacio y RG inexistente;
-no eliminar el state antes. Revisar Cost Management por cargos ya devengados:
-destroy no revierte costes ni garantiza desaparicion de retencion soft-delete.
+El runner busca endpoints en el output raiz `sql_nsp_demo`, comprueba workspace y
+**no selecciona otro**. Obtiene token Entra SQL y SAS `--as-user --auth-mode login`
+de dos horas solo en Prepare. Read reutiliza credencial/archivo. Resultado vacio
+sale con codigo 2: no es prueba concluyente. Prepare solo en A antes de proyectar;
+necesita CONTROL en `demo`, no `master`.
 
-## Fuentes verificadas
+Para B/C/D, pasar el objeto completo `sql_nsp_demo` con los mismos selectores:
 
-- [NSP para SQL Database (preview)](https://learn.microsoft.com/en-us/azure/azure-sql/database/network-security-perimeter?view=azuresql)
-- [Extended Events: matriz NSP, SAS, FQDN y errores](https://learn.microsoft.com/en-us/azure/azure-sql/database/xevent-db-diff-from-svr?view=azuresql#network-security-perimeter-preview)
-- [Crear credencial y archivo de eventos](https://learn.microsoft.com/en-us/azure/azure-sql/database/xevent-code-event-file?view=azuresql)
-- [CLI: SAS de delegacion de usuario](https://learn.microsoft.com/en-us/cli/azure/storage/container#az-storage-container-generate-sas)
-- [aztfmodnew CAF 5.0.0](https://registry.terraform.io/modules/aztfmodnew/caf/azurerm/5.0.0)
+```powershell
+# B; en C usar true; D vuelve a false.
+$next = '-var=sql_nsp_demo={sql_server_key="lab",storage_account_key="external",nsp_key="lab",profile_key="demo",access_mode="Enforced",allow_blob_outbound=false}'
+Terraform-WithVarFiles -Dir .\demos\sql-network-security-perimeter -Action plan -Workspace sql-nsp-tour -TerraformArguments @('-input=false', '-out=next.local.tfplan', $next)
+# Revisar diff y workspace antes de aprobar:
+terraform apply next.local.tfplan
+.\demos\sql-network-security-perimeter\ejecutar-sql.ps1 -Action Read -Workspace sql-nsp-tour
+```
+
+Mantener IP, login, SAS, archivo y consulta constantes. Esperar propagacion.
+No todo error es NSP: comprobar archivo/SAS y correlacionar diagnosticos.
+25759/25717, error exterior 40197 o resultado vacio pueden aparecer; fallo de
+login 42118 es inbound y **no** demuestra salida. No ampliar IP a `0.0.0.0/0`.
+Las consultas [diagnosticos-query.json](diagnosticos-query.json),
+[tablas](diagnosticos-tablas.json) y [esquema](diagnosticos-schema.json) usan las
+columnas historicamente verificadas de `NSPAccessLogs`. El nuevo root configura
+categorias explicitas, no `allLogs`. No se promete latencia ni resultados nuevos.
+
+## Evidencia y validacion
+
+[ensayo-azure.json](ensayo-azure.json) es **historico del root autonomo anterior**
+(2026-10-10, Spain Central), no evidencia de este nuevo root: A/C devolvieron dos
+eventos; B/D fallaron en Blob con 40197/25717 manteniendo login. Logs A/B/C
+confirmaron Allowed/defaultPolicy, Denied/DefaultDenyAll y Allowed/blob-outbound;
+D no estaba ingerido. Se destruyeron 15 recursos y el state quedo vacio.
+No hay una demo actualmente desplegada. SQL NSP sigue documentado como preview.
+Reensayar este root antes del evento; no presentar planes como pruebas T-SQL.
+
+Las siete pruebas mock del root anterior se retiraron. Las regresiones actuales
+estan en `tools/test_terraform_with_var_files.ps1` y `.sh` (argumentos/workspace),
+`tools/test_sql_nsp_configuration.ps1` (A/B/C/D y helpers desactivados por defecto)
+y `tools/test_sql_nsp_plan.ps1` (inspeccion de planes reales de este root).
+Los planes iniciales usan state vacio e IDs SQL desconocidos; no `-refresh=false`.
+
+Validacion de la integracion raiz (2026-10-10):
+`terraform init -input=false`, `terraform validate`, `terraform fmt -check`
+y fmt de los tfvars finalizaron correctamente. Planes autenticados mediante el
+wrapper: A **19 altas**, C **20 altas**, demo original `300-advanced-network-manager`
+**39 altas**, todos con cero cambios/bajas. Las comprobaciones de planes A/C
+verifican IDs SQL y asociacion NSP desconocidos, sin password/Key Vault/identidad
+SQL; la regresion 300 confirma helpers SQL/NSP desactivados y los tres modulos
+CAF instalados exactamente en 5.0.0. Pasaron 9 regresiones PowerShell, 5 Bash y
+5 comprobaciones de configuracion A/B/C/D/default. No se hizo apply/destroy ni
+se creo un state aplicado del nuevo laboratorio. AzureRM avisa de deprecacion
+`public_network_access_enabled` dentro de CAF 5.0.0 (no error); la demo mantiene
+el atributo realmente soportado por esa API CAF. No modificar el modulo descargado.
+
+```powershell
+# Desde raiz, despues de init; generar los planes con el wrapper como arriba.
+.\tools\test_terraform_with_var_files.ps1
+.\tools\test_sql_nsp_configuration.ps1
+.\tools\test_sql_nsp_plan.ps1 -PlanFile A.local.tfplan -State A
+.\tools\test_sql_nsp_plan.ps1 -PlanFile C.local.tfplan -State C
+.\tools\test_caf5_network_manager_plan.ps1 -PlanFile network-manager.local.tfplan
+```
+
+Estos contratos de planes usan la IP/nombre de Storage documentales del ejemplo.
+Tras personalizarlos, adaptar las expectativas locales; no publicar datos privados.
+
+## Rollback y limpieza futura
+
+En laboratorio, volver a A tras revisar el plan. Limpiar T-SQL con
+`ejecutar-sql.ps1 -Action Cleanup -Workspace sql-nsp-tour`.
+Para destruccion, usar el mismo wrapper/var-files/workspace y
+`-TerraformArguments @('-destroy','-out=destroy.local.tfplan')`, revisar y aplicar
+ese plan; comprobar `terraform state list` vacio y RG inexistente antes de retirar
+state. Destroy no revierte costes ni elimina necesariamente retencion soft-delete.
+
+## Fuentes
+
+- [NSP SQL (preview)](https://learn.microsoft.com/en-us/azure/azure-sql/database/network-security-perimeter?view=azuresql)
+- [Extended Events: SAS/FQDN/identidad y errores NSP](https://learn.microsoft.com/en-us/azure/azure-sql/database/xevent-db-diff-from-svr?view=azuresql#network-security-perimeter-preview)
+- [Credencial y archivo Extended Events](https://learn.microsoft.com/en-us/azure/azure-sql/database/xevent-code-event-file?view=azuresql)
+- [SAS de delegacion de usuario](https://learn.microsoft.com/en-us/cli/azure/storage/container#az-storage-container-generate-sas)
+- [CAF 5.0.0](https://registry.terraform.io/modules/aztfmodnew/caf/azurerm/5.0.0)

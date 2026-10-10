@@ -8,6 +8,7 @@
     echo "  --resource_address ADDR  Specify the resource address for import action (optional)"
     echo "  --resource_id ID         Specify the resource ID for import action (optional)"
     echo "  --workspace WORKSPACE    Specify the Terraform workspace (default: default)"
+    echo "  -- ARGS                  Additional Terraform arguments (passed without evaluation)"
     echo "  --help, -h               Show this help message"
     return 0
   fi
@@ -18,6 +19,7 @@
   local resource_address=""
   local resource_id=""
   local workspace="default"
+  local terraform_args=()
 
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
@@ -27,6 +29,7 @@
       --resource_address) resource_address="$2"; shift ;;
       --resource_id) resource_id="$2"; shift ;;
       --workspace) workspace="$2"; shift ;;
+      --) shift; terraform_args=("$@"); break ;;
       *) echo "Unknown parameter passed: $1"; return 1 ;;
     esac
     shift
@@ -45,7 +48,7 @@
   local var_files=()
   for file in "$dir"/*.tfvars; do
     if [[ -f "$file" ]]; then
-      var_files+=("--var-file $file")
+      var_files+=("-var-file=$file")
     fi
   done
 
@@ -55,40 +58,40 @@
   fi
 
   echo "Inicializando Terraform..."
-  eval terraform init
+  terraform init -input=false
   if [[ $? -ne 0 ]]; then
     echo "La inicialización de Terraform falló."
     return 1
   fi
 
   echo "Seleccionando el workspace: $workspace"
-  eval terraform workspace select "$workspace" || eval terraform workspace new "$workspace"
+  terraform workspace select -or-create "$workspace"
   if [[ $? -ne 0 ]]; then
     echo "La selección del workspace falló."
     return 1
   fi
 
   echo "Validando la configuración de Terraform..."
-  eval terraform validate
+  terraform validate
   if [[ $? -ne 0 ]]; then
     echo "La validación de Terraform falló."
     return 1
   fi
 
-  local command="terraform $action ${var_files[@]}"
+  local command=("$action" "${var_files[@]}" "${terraform_args[@]}")
 
   if [[ "$action" == "import" ]]; then
     if [[ -z "$resource_address" || -z "$resource_id" ]]; then
       echo "Para la acción 'import', se deben proporcionar la dirección del recurso y el ID del recurso."
       return 1
     fi
-    command="terraform $action ${var_files[@]} $resource_address $resource_id"
+    command+=("$resource_address" "$resource_id")
   elif [[ "$auto" == "auto" && ( "$action" == "apply" || "$action" == "destroy" ) ]]; then
-    command="$command -auto-approve"
+    command+=("-auto-approve")
   fi
 
-  echo "Ejecutando: $command"
-  eval "$command"
+  echo "Ejecutando Terraform $action en workspace $workspace con ${#var_files[@]} var-files."
+  terraform "${command[@]}"
 }
 
 # Uso de la función

@@ -1,5 +1,6 @@
 {
   "date": "2026-10-10",
+  "configuration": "Historical autonomous demo root (removed). This evidence does not verify the current shared repository root or its sector tfvars.",
   "location": "spaincentral",
   "caf": {
     "source": "aztfmodnew/caf/azurerm",

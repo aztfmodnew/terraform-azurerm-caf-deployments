@@ -9,11 +9,13 @@ terraform {
       version = ">= 4.0.0"
     }
   }
-  required_version = ">= 1.6.0"
+  required_version = ">= 1.8.0"
 }
 
 
 provider "azurerm" {
+  resource_provider_registrations = var.resource_provider_registrations
+  storage_use_azuread             = var.storage_use_azuread
   features {
     api_management {
       purge_soft_delete_on_destroy = var.provider_azurerm_features_api_management.purge_soft_delete_on_destroy
@@ -46,7 +48,6 @@ provider "azurerm" {
     }
     virtual_machine {
       delete_os_disk_on_deletion     = var.provider_azurerm_features_virtual_machine.delete_os_disk_on_deletion
-      graceful_shutdown              = var.provider_azurerm_features_virtual_machine.graceful_shutdown
       skip_shutdown_and_force_delete = var.provider_azurerm_features_virtual_machine.skip_shutdown_and_force_delete
     }
     virtual_machine_scale_set {

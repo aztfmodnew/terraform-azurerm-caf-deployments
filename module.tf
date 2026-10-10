@@ -1,11 +1,37 @@
 module "example" {
 
   source  = "aztfmodnew/caf/azurerm"
-  version = "~>4.26.1"
+  version = "5.0.0"
   #source = "git::https://github.com/aztfmodnew/terraform-azurerm-caf.git//?ref=4.17.0"
 
 
   current_landingzone_key               = var.landingzone.key
+  remote_objects                        = local.caf_remote_objects
+  client_config                         = try(var.caf_overrides.client_config, {})
+  tfstates                              = try(var.caf_overrides.tfstates, {})
+  subscriptions                         = try(var.caf_overrides.subscriptions, {})
+  cloud                                 = merge(var.cloud, try(var.caf_overrides.cloud, {}))
+  enable                                = try(var.caf_overrides.enable, {})
+  use_msi                               = try(var.caf_overrides.use_msi, false)
+  tenant_id                             = try(var.caf_overrides.tenant_id, null)
+  connectivity_subscription_id          = try(var.caf_overrides.connectivity_subscription_id, null)
+  connectivity_tenant_id                = try(var.caf_overrides.connectivity_tenant_id, null)
+  billing                               = try(var.caf_overrides.billing, {})
+  invoice_sections                      = try(var.caf_overrides.invoice_sections, {})
+  cache                                 = try(var.caf_overrides.cache, {})
+  cdn                                   = try(var.caf_overrides.cdn, {})
+  analytics                             = try(var.caf_overrides.analytics, {})
+  bot                                   = try(var.caf_overrides.bot, {})
+  monitoring                            = try(var.caf_overrides.monitoring, {})
+  dashboards                            = try(var.caf_overrides.dashboards, {})
+  chaos_studio                          = try(var.caf_overrides.chaos_studio, {})
+  app_config                            = var.app_config
+  user_type                             = try(var.caf_overrides.user_type, {})
+  palo_alto                             = try(var.caf_overrides.palo_alto, {})
+  pim                                   = try(var.caf_overrides.pim, {})
+  random_strings                        = try(var.caf_overrides.random_strings, {})
+  sentinel_watchlists                   = merge(var.sentinel_watchlists, try(var.caf_overrides.sentinel_watchlists, {}))
+  diagnostic_storage_accounts           = var.diagnostic_storage_accounts
   custom_role_definitions               = var.custom_role_definitions
   data_sources                          = var.data_sources
   event_hub_auth_rules                  = var.event_hub_auth_rules
@@ -15,6 +41,9 @@ module "example" {
   event_hubs                            = var.event_hubs
   global_settings                       = var.global_settings
   keyvault_access_policies              = var.keyvault_access_policies
+  keyvault_access_policies_azuread_apps = var.keyvault_access_policies_azuread_apps
+  diagnostics_definition                = var.diagnostics_definition
+  diagnostics_destinations              = var.diagnostics_destinations
   keyvault_certificate_issuers          = var.keyvault_certificate_issuers
   keyvaults                             = var.keyvaults
   log_analytics                         = var.log_analytics
@@ -30,11 +59,11 @@ module "example" {
   tags                                  = local.tags
   environment                           = var.environment
 
-  aadb2c = {
+  aadb2c = merge({
     aadb2c_directory = var.aadb2c_directory
-  }
+  }, try(var.caf_overrides.aadb2c, {}))
 
-  azuread = {
+  azuread = merge({
     azuread_administrative_unit_members = var.azuread_administrative_unit_members
     azuread_administrative_units        = var.azuread_administrative_units
     azuread_api_permissions             = var.azuread_api_permissions
@@ -48,7 +77,7 @@ module "example" {
     azuread_service_principal_passwords = var.azuread_service_principal_passwords
     azuread_service_principals          = var.azuread_service_principals
     azuread_users                       = var.azuread_users
-  }
+  }, try(var.caf_overrides.azuread, {}))
   # # Defaulted, you can declare an override if you dont target Azure public
   # cloud = {
   #   acrLoginServerEndpoint                      = var.acrLoginServerEndpoint
@@ -85,15 +114,15 @@ module "example" {
   #   vmImageAliasDoc                             = var.vmImageAliasDoc
   # }
 
-  cognitive_services = {
+  cognitive_services = merge({
     cognitive_services_account             = var.cognitive_services_account
     cognitive_account_customer_managed_key = var.cognitive_account_customer_managed_key
     cognitive_deployment                   = var.cognitive_deployment
-  }
-  communication = {
+  }, try(var.caf_overrides.cognitive_services, {}))
+  communication = merge({
     communication_services = var.communication_services
-  }
-  compute = {
+  }, try(var.caf_overrides.communication, {}))
+  compute = merge({
     aks_clusters                           = var.aks_clusters
     aro_clusters                           = var.aro_clusters
     availability_sets                      = var.availability_sets
@@ -124,15 +153,15 @@ module "example" {
     wvd_application_groups                 = var.wvd_application_groups
     wvd_host_pools                         = var.wvd_host_pools
     wvd_workspaces                         = var.wvd_workspaces
-  }
-  diagnostics = {
+  }, try(var.caf_overrides.compute, {}))
+  diagnostics = merge({
     diagnostic_event_hub_namespaces = var.diagnostic_event_hub_namespaces
     diagnostic_log_analytics        = var.diagnostic_log_analytics
     diagnostic_storage_accounts     = var.diagnostic_storage_accounts
     diagnostics_definition          = var.diagnostics_definition
     diagnostics_destinations        = var.diagnostics_destinations
-  }
-  database = {
+  }, try(var.caf_overrides.diagnostics, {}))
+  database = merge({
     app_config                         = var.app_config
     azurerm_redis_caches               = var.azurerm_redis_caches
     cosmos_dbs                         = var.cosmos_dbs
@@ -156,7 +185,7 @@ module "example" {
     mssql_mi_secondary_tdes            = var.mssql_mi_secondary_tdes
     mssql_mi_tdes                      = var.mssql_mi_tdes
     mssql_servers                      = var.mssql_servers
-    mysql_flexible_server              = var.mysql_flexible_server
+    mysql_flexible_servers             = var.mysql_flexible_server
     postgresql_flexible_servers        = var.postgresql_flexible_servers
     postgresql_servers                 = var.postgresql_servers
     synapse_workspaces                 = var.synapse_workspaces
@@ -171,13 +200,13 @@ module "example" {
       kusto_eventhub_data_connections        = var.kusto_eventhub_data_connections
       kusto_iothub_data_connections          = var.kusto_iothub_data_connections
     }
-  }
-  data_protection = {
+  }, try(var.caf_overrides.database, {}))
+  data_protection = merge({
     backup_vaults          = var.backup_vaults
     backup_vault_policies  = var.backup_vault_policies
     backup_vault_instances = var.backup_vault_instances
-  }
-  messaging = {
+  }, try(var.caf_overrides.data_protection, {}))
+  messaging = merge({
     signalr_services             = var.signalr_services
     servicebus_namespaces        = var.servicebus_namespaces
     servicebus_topics            = var.servicebus_topics
@@ -188,8 +217,8 @@ module "example" {
     eventgrid_domain_topic       = var.eventgrid_domain_topic
     web_pubsubs                  = var.web_pubsubs
     web_pubsub_hubs              = var.web_pubsub_hubs
-  }
-  networking = {
+  }, try(var.caf_overrides.messaging, {}))
+  networking = merge({
     application_gateway_applications                        = var.application_gateway_applications
     application_gateway_applications_v1                     = var.application_gateway_applications_v1
     application_gateway_platforms                           = var.application_gateway_platforms
@@ -235,12 +264,12 @@ module "example" {
     network_manager_network_groups                          = var.network_manager_network_groups
     network_manager_security_admin_configurations           = var.network_manager_security_admin_configurations
     network_manager_management_group_connections            = var.network_manager_management_group_connections
-    network_manager_scope_connections                       = var.network_manager_scope_connections
+    network_manager_scope_connection                        = var.network_manager_scope_connections
     network_manager_static_members                          = var.network_manager_static_members
     network_manager_subscription_connections                = var.network_manager_subscription_connections
     network_interface_backend_address_pool_association      = var.network_interface_backend_address_pool_association
     network_security_group_definition                       = var.network_security_group_definition
-    network_security_perimeters                             = var.network_security_perimeters
+    network_security_perimeters                             = local.demo_network_security_perimeters
     network_security_security_rules                         = var.network_security_security_rules
     network_watchers                                        = var.network_watchers
     private_dns                                             = var.private_dns
@@ -277,9 +306,9 @@ module "example" {
     vpn_gateway_connections                                 = var.vpn_gateway_connections
     vpn_gateway_nat_rules                                   = var.vpn_gateway_nat_rules
     vpn_sites                                               = var.vpn_sites
-  }
+  }, try(var.caf_overrides.networking, {}))
 
-  security = {
+  security = merge({
     disk_encryption_sets                  = var.disk_encryption_sets
     dynamic_keyvault_secrets              = var.dynamic_keyvault_secrets
     keyvault_certificate_issuers          = var.keyvault_certificate_issuers
@@ -305,9 +334,9 @@ module "example" {
     sentinel_dc_security_center           = var.sentinel_dc_security_center
     sentinel_dc_threat_intelligence       = var.sentinel_dc_threat_intelligence
 
-  }
+  }, try(var.caf_overrides.security, {}))
 
-  shared_services = {
+  shared_services = merge({
     automations                    = var.automations
     automation_schedules           = var.automation_schedules
     automation_runbooks            = var.automation_runbooks
@@ -324,16 +353,16 @@ module "example" {
     packer_service_principal       = var.packer_service_principal
     recovery_vaults                = var.recovery_vaults
     shared_image_galleries         = var.shared_image_galleries
-  }
-  storage = {
+  }, try(var.caf_overrides.shared_services, {}))
+  storage = merge({
     netapp_accounts             = var.netapp_accounts
     storage_account_blobs       = var.storage_account_blobs
     storage_account_file_shares = var.storage_account_file_shares
     storage_account_queues      = var.storage_account_queues
     storage_containers          = var.storage_containers
 
-  }
-  webapp = {
+  }, try(var.caf_overrides.storage, {}))
+  webapp = merge({
     azurerm_application_insights                   = var.azurerm_application_insights
     azurerm_application_insights_web_test          = var.azurerm_application_insights_web_test
     azurerm_application_insights_standard_web_test = var.azurerm_application_insights_standard_web_test
@@ -346,8 +375,8 @@ module "example" {
     service_plans                                  = var.service_plans
     static_sites                                   = var.static_sites
     windows_web_apps                               = var.windows_web_apps
-  }
-  data_factory = {
+  }, try(var.caf_overrides.webapp, {}))
+  data_factory = merge({
     data_factory                                 = var.data_factory
     data_factory_pipeline                        = var.data_factory_pipeline
     data_factory_trigger_schedule                = var.data_factory_trigger_schedule
@@ -373,8 +402,8 @@ module "example" {
       sql_server         = var.data_factory_linked_service_sql_server
       azure_databricks   = var.data_factory_linked_service_azure_databricks
     }
-  }
-  logic_app = {
+  }, try(var.caf_overrides.data_factory, {}))
+  logic_app = merge({
     integration_service_environment = var.integration_service_environment
     logic_app_action_custom         = var.logic_app_action_custom
     logic_app_action_http           = var.logic_app_action_http
@@ -386,12 +415,12 @@ module "example" {
     logic_app_trigger_recurrence   = var.logic_app_trigger_recurrence
     logic_app_workflow             = var.logic_app_workflow
     logic_app_standard             = var.logic_app_standard
-  }
-  identity = {
+  }, try(var.caf_overrides.logic_app, {}))
+  identity = merge({
     active_directory_domain_service             = var.active_directory_domain_service
     active_directory_domain_service_replica_set = var.active_directory_domain_service_replica_set
-  }
-  apim = {
+  }, try(var.caf_overrides.identity, {}))
+  apim = merge({
     api_management                      = var.api_management
     api_management_api                  = var.api_management_api
     api_management_api_diagnostic       = var.api_management_api_diagnostic
@@ -410,15 +439,15 @@ module "example" {
     api_management_group                = var.api_management_group
     api_management_subscription         = var.api_management_subscription
     api_management_product              = var.api_management_product
-  }
-  purview = {
+  }, try(var.caf_overrides.apim, {}))
+  purview = merge({
     purview_accounts = var.purview_accounts
-  }
-  maps = {
+  }, try(var.caf_overrides.purview, {}))
+  maps = merge({
     maps_accounts = var.maps_accounts
-  }
+  }, try(var.caf_overrides.maps, {}))
 
-  iot = {
+  iot = merge({
     digital_twins_instances             = var.digital_twins_instances
     digital_twins_endpoint_eventhubs    = var.digital_twins_endpoint_eventhubs
     digital_twins_endpoint_eventgrids   = var.digital_twins_endpoint_eventgrids
@@ -433,18 +462,18 @@ module "example" {
     iot_security_solution               = var.iot_security_solution
     iot_security_device_group           = var.iot_security_device_group
     iot_central_application             = var.iot_central_application
-  }
+  }, try(var.caf_overrides.iot, {}))
   powerbi_embedded = var.powerbi_embedded
 
   load_test = var.load_test
 
   preview_features = var.preview_features
 
-  maintenance = {
+  maintenance = merge({
     maintenance_configuration              = var.maintenance_configuration
     maintenance_assignment_virtual_machine = var.maintenance_assignment_virtual_machine
-  }
-  search_services = {
+  }, try(var.caf_overrides.maintenance, {}))
+  search_services = merge({
     search_services = var.search_services
-  }
+  }, try(var.caf_overrides.search_services, {}))
 }

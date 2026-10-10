@@ -8,4 +8,4 @@ crash.log
 *.xel
 *.sas
 local-*
-!.terraform.lock.hcl
+zz-local.tfvars
