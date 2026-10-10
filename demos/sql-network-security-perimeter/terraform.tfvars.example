@@ -1,0 +1,7 @@
+subscription_id     = "00000000-0000-0000-0000-000000000000"
+unique_suffix       = "replace123"
+operator_ipv4       = "203.0.113.10"
+sql_admin_name      = "Lab SQL administrator"
+sql_admin_object_id = "00000000-0000-0000-0000-000000000000"
+access_mode         = "Transition"
+allow_blob_outbound = false
